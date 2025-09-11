@@ -17,14 +17,11 @@ TAGS_URL = reverse('recipe:tag-list')
 
 def detail_url(tag_id):
     """Create and return a tag detail url."""
-    return reverse('recipr:tag-detail', args=[tag_id])
+    return reverse('recipe:tag-detail', args=[tag_id])
 
-def create_user():
+def create_user(**params):
     """Create and return a user."""
-    return get_user_model().objects.create_user(
-        email="test@example.com",
-        password="testpass123",
-    )
+    return get_user_model().objects.create_user(**params)
 
 class PublicTagsApiTest(TestCase):
     """Test unauthorizes API requests."""
@@ -44,8 +41,10 @@ class PrivateTagsApiTest(TestCase):
     """Test authorized API reuests."""
 
     def setUp(self):
-        self.client = APIClient
-        self.user = create_user()
+        self.client = APIClient()
+        self.user = create_user(
+        email="test@example.com",
+        password="testpass123",)
         self.client.force_authenticate(self.user)
 
     def test_retrieve_tags(self):
@@ -58,11 +57,13 @@ class PrivateTagsApiTest(TestCase):
         tags = Tag.objects.all().order_by('-name')
         serializer = TagSerializer(tags, many=True)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data, serializer)
+        self.assertEqual(res.data, serializer.data)
 
     def test_tags_limited_to_user(self):
         """Test list of tags is limited to authenticated user."""
-        user2 = create_user(email='user2@example.com')
+        user2 = create_user(
+        email="test2@example.com",
+        password="testpass123",)
         Tag.objects.create(user=user2, name='Fruity')
         tag = Tag.objects.create(user=self.user, name='Comfort Food')
 
