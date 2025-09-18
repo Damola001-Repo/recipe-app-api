@@ -25,6 +25,7 @@ def detail_url(recipe_id):
     """Create an return a recipe detail URL."""
     return reverse('recipe:recipe-detail', args=[recipe_id])
 
+
 def image_upload_url(recipe_id):
     """Create and return a recpe detail URL."""
     return reverse('recipe:recipe-upload-image', args=[recipe_id])
@@ -44,8 +45,10 @@ def create_recipe(user, **params):
     recipe = Recipe.objects.create(user=user, **defaults)
     return recipe
 
+
 def create_user(**params):
     return get_user_model().objects.create_user(**params)
+
 
 class PublicRecipeAPITest(TestCase):
     """Test unautheticated API requests."""
@@ -65,7 +68,8 @@ class PrivateRecipeAPITest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = create_user(email='user@example.com', password='testpass123')
+        self.user = create_user(email='user@example.com',
+                                password='testpass123')
         self.client.force_authenticate(self.user)
 
     def test_retrieve_recipes(self):
@@ -82,7 +86,8 @@ class PrivateRecipeAPITest(TestCase):
 
     def test_recipe_list_limited_to_user(self):
         """Test list of recipes is limited to authenticated user."""
-        other_user = create_user(email='other@example.com', password='password123')
+        other_user = create_user(email='other@example.com',
+                                 password='password123')
         create_recipe(user=other_user)
         create_recipe(user=self.user)
 
@@ -165,7 +170,8 @@ class PrivateRecipeAPITest(TestCase):
 
     def test_update_user_returns_error(self):
         """Test change the recipe user result in an error."""
-        new_user = create_user(email='user2@example.com', password='testpass123')
+        new_user = create_user(email='user2@example.com',
+                               password='testpass123')
         recipe = create_recipe(user=self.user)
 
         payload = {'user': new_user.id}
@@ -182,12 +188,14 @@ class PrivateRecipeAPITest(TestCase):
         url = detail_url(recipe.id)
         res = self.client.delete(url)
 
-        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(res.status_code,
+                         status.HTTP_204_NO_CONTENT)
         self.assertFalse(Recipe.objects.filter(id=recipe.id).exists())
 
     def test_delete_other_users_recipe_error(self):
         """Testing trying to delete another users recipe gives error."""
-        new_user = create_user(email='newuser@example.com', password='testpass123')
+        new_user = create_user(email='newuser@example.com',
+                               password='testpass123')
         recipe = create_recipe(user=new_user)
 
         url = detail_url(recipe.id)
@@ -224,7 +232,7 @@ class PrivateRecipeAPITest(TestCase):
         payload = {
             'title': 'Pongal',
             'time_minutes': 60,
-            'price':Decimal('5.2'),
+            'price': Decimal('5.2'),
             'tags': [{'name': 'Indian'}, {'name': 'Breakfast'}],
         }
         res = self.client.post(RECIPES_URL, payload, format='json')
@@ -233,7 +241,7 @@ class PrivateRecipeAPITest(TestCase):
         recipes = Recipe.objects.filter(user=self.user)
         self.assertEqual(recipes.count(), 1)
         recipe = recipes[0]
-        self.assertEqual(recipe.tags.count(), 2) # I saw this bug, but i ignored it
+        self.assertEqual(recipe.tags.count(), 2)
         self.assertIn(tag_indian, recipe.tags.all())
         for tag in payload['tags']:
             exists = recipe.tags.filter(
@@ -387,8 +395,10 @@ class PrivateRecipeAPITest(TestCase):
     def test_create_multiple_ingredients(self):
         """Test creating multiple Ingredients for one recipe."""
         recipe = create_recipe(user=self.user)
-        chili_ingredient = Ingredient.objects.create(user=self.user, name='Chili')
-        pepper_ingredient = Ingredient.objects.create(user=self.user, name='Pepper')
+        chili_ingredient = Ingredient.objects.create(user=self.user,
+                                                     name='Chili')
+        pepper_ingredient = Ingredient.objects.create(user=self.user,
+                                                      name='Pepper')
 
         payload = {'ingredients': [{'name': 'Chili'}, {'name': 'Pepper'}]}
         url = detail_url(recipe.id)
@@ -398,6 +408,46 @@ class PrivateRecipeAPITest(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn(chili_ingredient, recipe.ingredients.all())
         self.assertIn(pepper_ingredient, recipe.ingredients.all())
+
+    def test_filter_by_tags(self):
+        """Test filtering recipes by tag."""
+        r1 = create_recipe(user=self.user, title="Ogi and Akara")
+        r2 = create_recipe(user=self.user, title="Eba and Egusi")
+        t1 = Tag.objects.create(user=self.user, name="Breakfast")
+        t2 = Tag.objects.create(user=self.user, name="Dinner")
+        r1.tags.add(t1)
+        r2.tags.add(t2)
+
+        r3 = create_recipe(user=self.user, title="Bread and Beans")
+        params = {'tags': f'{t1.id},{t2.id}'}
+        res = self.client.get(RECIPES_URL, params)
+
+        s1 = RecipeSerializer(r1)
+        s2 = RecipeSerializer(r2)
+        s3 = RecipeSerializer(r3)
+        self.assertIn(s1.data, res.data)
+        self.assertIn(s2.data, res.data)
+        self.assertNotIn(s3.data, res.data)
+
+    def test_filter_by_ingredient(self):
+        """Test filtering recipes by ingredient."""
+        r1 = create_recipe(user=self.user, title="Ogi and Akara")
+        r2 = create_recipe(user=self.user, title="Eba and Egusi")
+        ing1 = Ingredient.objects.create(user=self.user, name="Breakfast")
+        ing2 = Ingredient.objects.create(user=self.user, name="Dinner")
+        r1.ingredients.add(ing1)
+        r2.ingredients.add(ing2)
+
+        r3 = create_recipe(user=self.user, title="Bread and Beans")
+        params = {'ingredients': f'{ing1.id},{ing2.id}'}
+        res = self.client.get(RECIPES_URL, params)
+        s1 = RecipeSerializer(r1)
+        s2 = RecipeSerializer(r2)
+        s3 = RecipeSerializer(r3)
+
+        self.assertIn(s1.data, res.data)
+        self.assertIn(s2.data, res.data)
+        self.assertNotIn(s3.data, res.data)
 
 
 class ImageUploadTest(TestCase):

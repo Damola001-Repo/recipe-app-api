@@ -1,6 +1,7 @@
 """
 Test for Tag API.
 """
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import TestCase
@@ -8,27 +9,29 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from core.models import Tag
+from core.models import Tag, Recipe
 
 from recipe.serializers import TagSerializer
 
 
 TAGS_URL = reverse('recipe:tag-list')
 
+
 def detail_url(tag_id):
     """Create and return a tag detail url."""
     return reverse('recipe:tag-detail', args=[tag_id])
 
+
 def create_user(**params):
     """Create and return a user."""
     return get_user_model().objects.create_user(**params)
+
 
 class PublicTagsApiTest(TestCase):
     """Test unauthorizes API requests."""
 
     def setUp(self):
         self.client = APIClient()
-
 
     def test_auth_required(self):
         """Test auth is required for retrieving tags."""
@@ -42,9 +45,8 @@ class PrivateTagsApiTest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = create_user(
-        email="test@example.com",
-        password="testpass123",)
+        self.user = create_user(email="test@example.com",
+                                password="testpass123",)
         self.client.force_authenticate(self.user)
 
     def test_retrieve_tags(self):
@@ -61,9 +63,8 @@ class PrivateTagsApiTest(TestCase):
 
     def test_tags_limited_to_user(self):
         """Test list of tags is limited to authenticated user."""
-        user2 = create_user(
-        email="test2@example.com",
-        password="testpass123",)
+        user2 = create_user(email="test2@example.com",
+                            password="testpass123",)
         Tag.objects.create(user=user2, name='Fruity')
         tag = Tag.objects.create(user=self.user, name='Comfort Food')
 
@@ -97,3 +98,45 @@ class PrivateTagsApiTest(TestCase):
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
         tag = Tag.objects.filter(user=self.user)
         self.assertFalse(tag.exists())
+
+    def test_filter_tags_assigned_to_recipe(self):
+        """Test listing tags by assigned recipe."""
+        tag1 = Tag.objects.create(user=self.user, name="Breakfast")
+        tag2 = Tag.objects.create(user=self.user, name="Lunch")
+
+        recipe = Recipe.objects.create(
+            title="Beans and Bread",
+            time_minutes=6,
+            price=Decimal('5.2'),
+            user=self.user
+        )
+        recipe.tags.add(tag1)
+
+        res = self.client.get(TAGS_URL, {'assigned_only': 1})
+        s1 = TagSerializer(tag1)
+        s2 = TagSerializer(tag2)
+        self.assertIn(s1.data, res.data)
+        self.assertNotIn(s2.data, res.data)
+
+    def test_filter_tags_unique(self):
+        """Test filteres tags return a unique list."""
+        tag = Tag.objects.create(user=self.user, name="Breakfast")
+        Tag.objects.create(user=self.user, name="Dinner")
+        recipe1 = Recipe.objects.create(
+            title="Ogi and Akara",
+            time_minutes=20,
+            price=Decimal('5.8'),
+            user=self.user
+        )
+        recipe2 = Recipe.objects.create(
+            title="Bread and Beans",
+            time_minutes=25,
+            price=Decimal('3.5'),
+            user=self.user
+        )
+
+        recipe1.tags.add(tag)
+        recipe2.tags.add(tag)
+
+        res = self.client.get(TAGS_URL, {'assigned_only': 1})
+        self.assertEqual(len(res.data), 1)
